@@ -7,7 +7,10 @@ def generate_relationship_graph(state: MysteryState, chapter: int, output_path: 
     net = Network(height="600px", width="100%", directed=False, notebook=False, bgcolor="#ffffff", font_color="black")
     
     # Add nodes for each character
-    for char in state.characters:
+    active_characters = [c for c in state.characters if not getattr(c, 'is_ignored', False)]
+    active_char_names = {c.name for c in active_characters}
+    
+    for char in active_characters:
         color = "#95A5A6" # Grey (不明)
         if char.status == "生存":
             color = "#2ECC71" # Green
@@ -38,8 +41,8 @@ def generate_relationship_graph(state: MysteryState, chapter: int, output_path: 
             for i in range(len(people)):
                 for j in range(i + 1, len(people)):
                     p1, p2 = people[i], people[j]
-                    # Verify both names exist in characters to avoid errors
-                    if any(c.name == p1 for c in state.characters) and any(c.name == p2 for c in state.characters):
+                    # Verify both names exist in active characters to avoid errors and hide ignored
+                    if p1 in active_char_names and p2 in active_char_names:
                         # Sort alphabetically to treat (A, B) and (B, A) as same edge
                         edge = tuple(sorted([p1, p2]))
                         interactions.add(edge)

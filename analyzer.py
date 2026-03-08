@@ -28,7 +28,7 @@ def analyze_notes(current_state: MysteryState, chapter: int, notes: str, api_key
 {notes}
 
 以下のルールに従って更新を行ってください。
-1. 登場人物(characters)が新しく登場した場合はリストに追加し、既存の人物は状態(status: 生存/死亡/不明)、役割、各章ごとの関係性(relationship_history)を適切に更新してください。過去の章の関係性履歴は消さずに保持し、今回の章における関係性や心情の変化を relationship_history の "キー={chapter}" の値に追加してください。
+1. 登場人物(characters)が新しく登場した場合はリストに追加し、既存の人物は状態(status: 生存/死亡/不明)、役割、各章ごとの関係性(relationship_history)を適切に更新してください。過去の章の関係性履歴は消さずに保持し、今回の章における関係性や心情の変化を relationship_history の "キー={chapter}" の値に追加してください。ただし、is_ignored が true になっている人物の情報は一切変更・追加せず、そのままの状態で保持してください。
 2. イベントの時系列(timelines)に、メモから読み取れるイベントを1つ以上追加してください。
 3. 重要なアイテム(items)が登場した場合はリストに追加し、既存のアイテムの場合は説明(description)、発見場所(location_found)、現在の所持者(current_possessor)を適切に更新してください。ただし、is_ignored が true になっているアイテムは変更せず、そのままの状態で保持してください。
 4. 過去の状態と明らかな矛盾がある場合（例：すでに`死亡`となっているはずの人物が以降の章で生存して行動している、またはアリバイが成立しない場所の移動など）は、`warnings`リストに具体的な警告メッセージを追加してください。矛盾がない場合は空のリストにしてください。

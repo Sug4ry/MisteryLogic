@@ -11,6 +11,7 @@ class Character(BaseModel):
         default_factory=dict,
         description="各章ごとの関係性の履歴。キーは章番号、値はその章時点での他の人物との関係性や状況。"
     )
+    is_ignored: bool = Field(default=False, description="この人物が推理に不要と手動でマークされているかどうか。")
 
 class Timeline(BaseModel):
     model_config = ConfigDict(extra='forbid')
