@@ -69,20 +69,35 @@ def generate_relationship_graph(state: MysteryState, chapter: int, output_path: 
     with open(output_path, "r", encoding="utf-8") as f:
         html = f.read()
     
-    custom_css = """
+    custom_css_js = """
     <style>
     .vis-tooltip {
         max-height: 50vh;
-        overflow-y: auto;
+        overflow-y: auto !important;
         white-space: pre-wrap;
         pointer-events: auto !important; /* Allow touch/scroll on the tooltip */
+        touch-action: pan-y !important; /* Critical for mobile touch scrolling */
     }
     </style>
+    <script>
+    // Stop event propagation to prevent the canvas from panning when scrolling the tooltip
+    document.addEventListener('DOMContentLoaded', function() {
+        var stopProp = function(e) {
+            if (e.target.closest('.vis-tooltip')) {
+                e.stopPropagation();
+            }
+        };
+        document.addEventListener('wheel', stopProp, {capture: true, passive: false});
+        document.addEventListener('touchstart', stopProp, {capture: true, passive: false});
+        document.addEventListener('touchmove', stopProp, {capture: true, passive: false});
+        document.addEventListener('touchend', stopProp, {capture: true, passive: false});
+    });
+    </script>
     """
     
     # Inject before </head> or <body>
     if "</head>" in html:
-        html = html.replace("</head>", f"{custom_css}</head>")
+        html = html.replace("</head>", f"{custom_css_js}</head>")
     
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
