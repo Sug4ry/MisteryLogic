@@ -25,6 +25,7 @@ class Item(BaseModel):
     description: str = Field(description="アイテムの説明や特徴。")
     location_found: str = Field(description="アイテムが最初に発見された場所。")
     current_possessor: str = Field(description="現在そのアイテムを所持している人物の名前。不明な場合や共有の場所に保管されている場合はその状況。")
+    is_ignored: bool = Field(default=False, description="このアイテムが推理に不要と手動でマークされているかどうか。")
 
 class MysteryState(BaseModel):
     model_config = ConfigDict(extra='forbid')

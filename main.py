@@ -119,12 +119,43 @@ with col2:
         st.info("まだデータがありません。メモを入力して解析してください。")
             
 st.markdown("---")
-st.subheader("🔑 重要なアイテムと所持者")
+st.subheader("🔑 重要なアイテム")
+
 if len(state.items) > 0:
-    for item in state.items:
-        with st.expander(f"{item.name} (現在: {item.current_possessor})"):
+    active_items = [i for i in state.items if not i.is_ignored]
+    ignored_items = [i for i in state.items if i.is_ignored]
+    
+    def render_item(item, is_ignored_section=False):
+        # We use a unique key based on item name and its section
+        key_prefix = f"item_{'ignored' if is_ignored_section else 'active'}_{item.name}"
+        
+        with st.expander(f"{'❌ ' if item.is_ignored else ''}{item.name} (現在: {item.current_possessor})"):
             st.markdown(f"**説明:** {item.description}")
             st.markdown(f"**発見場所:** {item.location_found}")
+            
+            new_possessor = st.text_input("現在の所持者を編集:", value=item.current_possessor, key=f"{key_prefix}_possessor")
+            is_ignored = st.checkbox("このアイテムを推理から除外する (下部に移動します)", value=item.is_ignored, key=f"{key_prefix}_ignored")
+            
+            if new_possessor != item.current_possessor or is_ignored != item.is_ignored:
+                # Find the actual item in the state and update it
+                for s_item in state.items:
+                    if s_item.name == item.name:
+                        s_item.current_possessor = new_possessor
+                        s_item.is_ignored = is_ignored
+                        break
+                save_state_to_sheet(state)
+                st.rerun()
+
+    # Render active items first
+    for item in active_items:
+        render_item(item, is_ignored_section=False)
+        
+    # Render ignored items at the bottom
+    if ignored_items:
+        st.markdown("##### 📦 除外されたアイテム")
+        for item in ignored_items:
+            render_item(item, is_ignored_section=True)
+
 else:
     st.info("現在追跡中のアイテムはありません。")
 
