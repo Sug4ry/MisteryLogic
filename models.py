@@ -19,10 +19,18 @@ class Timeline(BaseModel):
     location: str = Field(description="イベントが発生した場所。")
     involved_persons: List[str] = Field(description="イベントに関与した人物の名前のリスト。")
 
+class Item(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str = Field(description="アイテムの名前。")
+    description: str = Field(description="アイテムの説明や特徴。")
+    location_found: str = Field(description="アイテムが最初に発見された場所。")
+    current_possessor: str = Field(description="現在そのアイテムを所持している人物の名前。不明な場合や共有の場所に保管されている場合はその状況。")
+
 class MysteryState(BaseModel):
     model_config = ConfigDict(extra='forbid')
     characters: List[Character] = Field(default_factory=list, description="物語の登場人物のリスト。")
     timelines: List[Timeline] = Field(default_factory=list, description="物語の時系列イベント。")
+    items: List[Item] = Field(default_factory=list, description="物語に登場する重要なアイテムのリスト。")
 
     @classmethod
     def load_from_json(cls, filepath: str) -> 'MysteryState':

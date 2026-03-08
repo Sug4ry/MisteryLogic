@@ -53,9 +53,10 @@ except Exception as e:
 st.sidebar.header("現在の状態")
 st.sidebar.write(f"👥 登場人物: {len(state.characters)}人")
 st.sidebar.write(f"📝 イベント数: {len(state.timelines)}件")
+st.sidebar.write(f"🔍 アイテム数: {len(state.items)}件")
 if st.sidebar.button("状態をリセット (スプレッドシートを初期化)"):
     # 空の状態で上書き保存してリセット
-    save_state_to_sheet(MysteryState(characters=[], timelines=[]))
+    save_state_to_sheet(MysteryState(characters=[], timelines=[], items=[]))
     st.rerun()
 
 # --- Main Layout ---
@@ -117,6 +118,16 @@ with col2:
     else:
         st.info("まだデータがありません。メモを入力して解析してください。")
             
+st.markdown("---")
+st.subheader("🔑 重要なアイテムと所持者")
+if len(state.items) > 0:
+    for item in state.items:
+        with st.expander(f"{item.name} (現在: {item.current_possessor})"):
+            st.markdown(f"**説明:** {item.description}")
+            st.markdown(f"**発見場所:** {item.location_found}")
+else:
+    st.info("現在追跡中のアイテムはありません。")
+
 st.markdown("---")
 st.subheader("現在の生データ (JSON)")
 with st.expander("JSONデータを表示"):

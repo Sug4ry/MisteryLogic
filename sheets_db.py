@@ -38,11 +38,11 @@ def load_state_from_sheet() -> MysteryState:
             data = json.loads(val)
             return MysteryState(**data)
         else:
-            return MysteryState(characters=[], timelines=[])
+            return MysteryState(characters=[], timelines=[], items=[])
     except Exception as e:
         st.error(f"スプレッドシートからのデータ読み込みに失敗しました: {e}")
         # 読み込めない場合は初期状態を返す
-        return MysteryState(characters=[], timelines=[])
+        return MysteryState(characters=[], timelines=[], items=[])
 
 def save_state_to_sheet(state: MysteryState):
     """MysteryStateオブジェクトをJSON文字列に変換し、Google SheetsのA1セルに保存する"""
