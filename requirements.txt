@@ -1,0 +1,6 @@
+streamlit>=1.31.0
+google-genai>=0.2.0
+pydantic>=2.5.0
+pyvis>=0.3.2
+gspread>=6.0.0
+oauth2client>=4.1.3
