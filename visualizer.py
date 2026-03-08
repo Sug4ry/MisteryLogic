@@ -64,3 +64,25 @@ def generate_relationship_graph(state: MysteryState, chapter: int, output_path: 
     
     # Generate HTML
     net.save_graph(output_path)
+    
+    # Add custom CSS for scrollable tooltips (useful for mobile)
+    with open(output_path, "r", encoding="utf-8") as f:
+        html = f.read()
+    
+    custom_css = """
+    <style>
+    .vis-tooltip {
+        max-height: 50vh;
+        overflow-y: auto;
+        white-space: pre-wrap;
+        pointer-events: auto !important; /* Allow touch/scroll on the tooltip */
+    }
+    </style>
+    """
+    
+    # Inject before </head> or <body>
+    if "</head>" in html:
+        html = html.replace("</head>", f"{custom_css}</head>")
+    
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html)
