@@ -47,9 +47,12 @@ def generate_relationship_graph(state: MysteryState, chapter: int, output_path: 
     for p1, p2 in interactions:
         net.add_edge(p1, p2)
         
-    # Set physics layout options
+    # Set physics and interaction layout options
     net.set_options("""
     var options = {
+      "interaction": {
+        "hover": true
+      },
       "physics": {
         "forceAtlas2Based": {
           "gravitationalConstant": -100,
@@ -71,19 +74,93 @@ def generate_relationship_graph(state: MysteryState, chapter: int, output_path: 
     
     custom_css_js = """
     <style>
+    /* Hide the default vis.js tooltip entirely */
     .vis-tooltip {
-        max-height: 50vh;
-        overflow-y: auto !important;
-        white-space: pre-wrap;
-        pointer-events: auto !important; /* Allow touch/scroll on the tooltip */
-        touch-action: pan-y !important; /* Critical for mobile touch scrolling */
+        display: none !important;
+    }
+    
+    /* Custom overlay for mobile-friendly scrollable info */
+    #custom-tooltip-overlay {
+        display: none;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 250px;
+        max-height: 80%;
+        overflow-y: auto;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 9999;
+        font-size: 14px;
+        pointer-events: auto; /* allow touching/scrolling */
+        touch-action: pan-y;
+    }
+    
+    /* Close button for mobile */
+    #custom-tooltip-close {
+        float: right;
+        cursor: pointer;
+        font-weight: bold;
+        color: #888;
+        font-size: 18px;
+        line-height: 1;
+        margin-left: 10px;
     }
     </style>
+    
+    <div id="custom-tooltip-overlay">
+        <span id="custom-tooltip-close">&times;</span>
+        <div id="custom-tooltip-content"></div>
+    </div>
+    
     <script>
-    // Stop event propagation to prevent the canvas from panning when scrolling the tooltip
     document.addEventListener('DOMContentLoaded', function() {
+        // Wait for network to be initialized by vis.js
+        var checkNetwork = setInterval(function() {
+            if (typeof network !== 'undefined' && typeof nodes !== 'undefined') {
+                clearInterval(checkNetwork);
+                
+                var overlay = document.getElementById("custom-tooltip-overlay");
+                var content = document.getElementById("custom-tooltip-content");
+                var closeBtn = document.getElementById("custom-tooltip-close");
+                
+                // Function to show custom tooltip
+                function showTooltip(nodeId) {
+                    var node = nodes.get(nodeId);
+                    if(node && node.title) {
+                        content.innerHTML = "<strong>" + node.label + "</strong><br><hr style='margin: 5px 0'>" + node.title.replace(/\\n/g, "<br>");
+                        overlay.style.display = "block";
+                    }
+                }
+                
+                // 1. Mobile & Desktop Tap/Click
+                network.on("click", function (params) {
+                    if(params.nodes.length > 0) {
+                        showTooltip(params.nodes[0]);
+                    } else {
+                        // Clicked on background, close it
+                        overlay.style.display = "none";
+                    }
+                });
+                
+                // 2. Desktop Hover
+                network.on("hoverNode", function (params) {
+                    showTooltip(params.node);
+                });
+                
+                // Close button logic
+                closeBtn.onclick = function() {
+                    overlay.style.display = "none";
+                };
+            }
+        }, 200);
+        
+        // Stop event propagation to prevent the canvas from panning when scrolling the tooltip
         var stopProp = function(e) {
-            if (e.target.closest('.vis-tooltip')) {
+            if (e.target.closest('#custom-tooltip-overlay')) {
                 e.stopPropagation();
             }
         };
@@ -95,9 +172,11 @@ def generate_relationship_graph(state: MysteryState, chapter: int, output_path: 
     </script>
     """
     
-    # Inject before </head> or <body>
-    if "</head>" in html:
-        html = html.replace("</head>", f"{custom_css_js}</head>")
+    # Inject before </body> because we are inserting a <div>
+    if "</body>" in html:
+        html = html.replace("</body>", f"{custom_css_js}</body>")
+    else:
+        html += custom_css_js
     
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
