@@ -204,8 +204,6 @@ st.subheader("🕰️ イベント履歴")
 if len(state.timelines) > 0:
     sorted_timelines = sorted(state.timelines, key=lambda x: x.chapter_number)
     
-    events_to_delete = []
-    
     for tl in sorted_timelines:
         key_prefix = f"tl_{tl.uid}"
         with st.expander(f"【第{tl.chapter_number}章】 📍{tl.location} - {tl.event[:20]}..."):
@@ -221,7 +219,9 @@ if len(state.timelines) > 0:
             col_a, col_b = st.columns([8, 2])
             with col_b:
                 if st.button("🗑️ 削除", key=f"{key_prefix}_del"):
-                    events_to_delete.append(tl.uid)
+                    state.timelines = [t for t in state.timelines if t.uid != tl.uid]
+                    save_state_to_sheet(state)
+                    st.rerun()
             
             # Check for edits
             if (new_chapter != tl.chapter_number or 
@@ -239,12 +239,6 @@ if len(state.timelines) > 0:
                         break
                 save_state_to_sheet(state)
                 st.rerun()
-                
-    # Handle deletions
-    if events_to_delete:
-        state.timelines = [t for t in state.timelines if t.uid not in events_to_delete]
-        save_state_to_sheet(state)
-        st.rerun()
         
 else:
     st.info("過去のイベントはまだ記録されていません。")
