@@ -85,11 +85,11 @@ def save_state_to_sheet(state: MysteryState, book_title: str = "デフォルト�
         if sheet.acell('A1').value != 'Book Title':
             sheet.update('A1:B1', [['Book Title', 'State JSON']])
             
-        try:
-            cell = sheet.find(book_title, in_column=1)
+        cell = sheet.find(book_title, in_column=1)
+        if cell:
             # 既存の行を更新
             sheet.update_cell(cell.row, 2, json_data)
-        except gspread.exceptions.CellNotFound:
+        else:
             # 新しい行に追加
             sheet.append_row([book_title, json_data])
             
