@@ -119,63 +119,45 @@ with col2:
         st.info("まだデータがありません。メモを入力して解析してください。")
 
 st.markdown("---")
-col3, col4 = st.columns(2)
-
-with col3:
-    st.subheader("👥 登場人物")
-    if len(state.characters) > 0:
-        active_chars = [c for c in state.characters if not c.is_ignored]
-        ignored_chars = [c for c in state.characters if c.is_ignored]
-        
-        def render_character(char, is_ignored_section=False):
-            key_prefix = f"char_{'ignored' if is_ignored_section else 'active'}_{char.name}"
-            with st.expander(f"{'❌ ' if char.is_ignored else ''}{char.name} (役割: {char.role} / 状態: {char.status})"):
-                new_role = st.text_input("役割を編集:", value=char.role, key=f"{key_prefix}_role")
-                
-                status_options = ["生存", "死亡", "不明"]
-                try:
-                    status_idx = status_options.index(char.status)
-                except ValueError:
-                    status_idx = 2
-                new_status = st.selectbox("状態を編集:", options=status_options, index=status_idx, key=f"{key_prefix}_status")
-                
-                is_ignored = st.checkbox("この人物を推理から除外する (相関図から消え、下部に移動します)", value=char.is_ignored, key=f"{key_prefix}_ignored")
-                
-                if new_role != char.role or new_status != char.status or is_ignored != char.is_ignored:
-                    for s_char in state.characters:
-                        if s_char.name == char.name:
-                            s_char.role = new_role
-                            s_char.status = new_status
-                            s_char.is_ignored = is_ignored
-                            break
-                    save_state_to_sheet(state)
-                    st.rerun()
-
-        for char in active_chars:
-            render_character(char, is_ignored_section=False)
+st.subheader("👥 登場人物")
+if len(state.characters) > 0:
+    active_chars = [c for c in state.characters if not c.is_ignored]
+    ignored_chars = [c for c in state.characters if c.is_ignored]
+    
+    def render_character(char, is_ignored_section=False):
+        key_prefix = f"char_{'ignored' if is_ignored_section else 'active'}_{char.name}"
+        with st.expander(f"{'❌ ' if char.is_ignored else ''}{char.name} (役割: {char.role} / 状態: {char.status})"):
+            new_role = st.text_input("役割を編集:", value=char.role, key=f"{key_prefix}_role")
             
-        if ignored_chars:
-            st.markdown("##### 📦 除外された人物")
-            for char in ignored_chars:
-                render_character(char, is_ignored_section=True)
-    else:
-        st.info("現在追跡中の人物はありません。")
-
-with col4:
-    st.subheader("🕰️ イベント履歴")
-    if len(state.timelines) > 0:
-        sorted_timelines = sorted(state.timelines, key=lambda x: x.chapter_number)
-        
-        # Display as a clean timeline format
-        for tl in sorted_timelines:
-            st.markdown(f"**【第{tl.chapter_number}章】 📍{tl.location}**")
-            st.markdown(f"> {tl.event}")
-            if tl.involved_persons:
-                st.caption(f"関与者: {', '.join(tl.involved_persons)}")
-            st.markdown("---")
-    else:
-        st.info("過去のイベントはまだ記録されていません。")
+            status_options = ["生存", "死亡", "不明"]
+            try:
+                status_idx = status_options.index(char.status)
+            except ValueError:
+                status_idx = 2
+            new_status = st.selectbox("状態を編集:", options=status_options, index=status_idx, key=f"{key_prefix}_status")
             
+            is_ignored = st.checkbox("この人物を推理から除外する (相関図から消え、下部に移動します)", value=char.is_ignored, key=f"{key_prefix}_ignored")
+            
+            if new_role != char.role or new_status != char.status or is_ignored != char.is_ignored:
+                for s_char in state.characters:
+                    if s_char.name == char.name:
+                        s_char.role = new_role
+                        s_char.status = new_status
+                        s_char.is_ignored = is_ignored
+                        break
+                save_state_to_sheet(state)
+                st.rerun()
+
+    for char in active_chars:
+        render_character(char, is_ignored_section=False)
+        
+    if ignored_chars:
+        st.markdown("##### 📦 除外された人物")
+        for char in ignored_chars:
+            render_character(char, is_ignored_section=True)
+else:
+    st.info("現在追跡中の人物はありません。")
+
 st.markdown("---")
 st.subheader("🔑 重要なアイテム")
 
@@ -216,6 +198,18 @@ if len(state.items) > 0:
 
 else:
     st.info("現在追跡中のアイテムはありません。")
+
+st.markdown("---")
+st.subheader("🕰️ イベント履歴")
+if len(state.timelines) > 0:
+    sorted_timelines = sorted(state.timelines, key=lambda x: x.chapter_number)
+    for tl in sorted_timelines:
+        with st.expander(f"【第{tl.chapter_number}章】 📍{tl.location}"):
+            st.markdown(tl.event)
+            if tl.involved_persons:
+                st.caption(f"関与者: {', '.join(tl.involved_persons)}")
+else:
+    st.info("過去のイベントはまだ記録されていません。")
 
 st.markdown("---")
 st.subheader("現在の生データ (JSON)")
