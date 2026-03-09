@@ -204,11 +204,28 @@ st.subheader("🕰️ イベント履歴")
 if len(state.timelines) > 0:
     sorted_timelines = sorted(state.timelines, key=lambda x: x.chapter_number)
     
+    def save_timeline_edit(uid, chap_key, loc_key, event_key, persons_key):
+        n_chap = st.session_state[chap_key]
+        n_loc = st.session_state[loc_key]
+        n_evt = st.session_state[event_key]
+        n_pers = [p.strip() for p in st.session_state[persons_key].split(",") if p.strip()]
+        for s_tl in state.timelines:
+            if s_tl.uid == uid:
+                s_tl.chapter_number = n_chap
+                s_tl.location = n_loc
+                s_tl.event = n_evt
+                s_tl.involved_persons = n_pers
+                break
+        save_state_to_sheet(state)
+
+    def delete_timeline(uid):
+        state.timelines = [t for t in state.timelines if t.uid != uid]
+        save_state_to_sheet(state)
+
     for tl in sorted_timelines:
         key_prefix = f"tl_{tl.uid}"
         with st.expander(f"【第{tl.chapter_number}章】 📍{tl.location} - {tl.event[:20]}..."):
             
-            # Use unique session keys to capture input independently
             st.number_input("発生章", min_value=1, value=tl.chapter_number, step=1, key=f"{key_prefix}_chap_input")
             st.text_input("場所", value=tl.location, key=f"{key_prefix}_loc_input")
             st.text_area("出来事の内容", value=tl.event, key=f"{key_prefix}_event_input")
@@ -218,29 +235,10 @@ if len(state.timelines) > 0:
             
             col_a, col_b = st.columns([8, 2])
             with col_a:
-                if st.button("💾 変更を保存", key=f"{key_prefix}_save_btn"):
-                    n_chap = st.session_state[f"{key_prefix}_chap_input"]
-                    n_loc = st.session_state[f"{key_prefix}_loc_input"]
-                    n_evt = st.session_state[f"{key_prefix}_event_input"]
-                    n_pers_str = st.session_state[f"{key_prefix}_persons_input"]
-                    
-                    n_pers = [p.strip() for p in n_pers_str.split(",") if p.strip()]
-                    
-                    for s_tl in state.timelines:
-                        if s_tl.uid == tl.uid:
-                            s_tl.chapter_number = n_chap
-                            s_tl.location = n_loc
-                            s_tl.event = n_evt
-                            s_tl.involved_persons = n_pers
-                            break
-                    save_state_to_sheet(state)
-                    st.rerun()
+                st.button("💾 変更を保存", key=f"{key_prefix}_save_btn", on_click=save_timeline_edit, args=(tl.uid, f"{key_prefix}_chap_input", f"{key_prefix}_loc_input", f"{key_prefix}_event_input", f"{key_prefix}_persons_input"))
                     
             with col_b:
-                if st.button("🗑️ 削除", key=f"{key_prefix}_del_btn"):
-                    state.timelines = [t for t in state.timelines if t.uid != tl.uid]
-                    save_state_to_sheet(state)
-                    st.rerun()
+                st.button("🗑️ 削除", key=f"{key_prefix}_del_btn", on_click=delete_timeline, args=(tl.uid,))
         
 else:
     st.info("過去のイベントはまだ記録されていません。")
