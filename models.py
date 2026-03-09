@@ -1,4 +1,5 @@
 import json
+import uuid
 from typing import List, Dict, Literal
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -15,6 +16,7 @@ class Character(BaseModel):
 
 class Timeline(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    uid: str = Field(default_factory=lambda: str(uuid.uuid4()), description="イベントを一意に識別するためのID。")
     chapter_number: int = Field(description="イベントが発生した章番号。")
     event: str = Field(description="発生したイベントの詳細な内容。")
     location: str = Field(description="イベントが発生した場所。")
