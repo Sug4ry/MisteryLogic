@@ -4,7 +4,7 @@ from models import MysteryState
 from analyzer import analyze_notes
 from visualizer import generate_relationship_graph
 import streamlit.components.v1 as components
-from sheets_db import load_state_from_sheet, save_state_to_sheet
+from sheets_db import load_state_from_sheet, save_state_to_sheet, get_all_books
 
 st.set_page_config(page_title="Mystery Logic Analyzer", layout="wide", page_icon="🕵️")
 
@@ -41,22 +41,54 @@ else:
 # Update os environment just in case underlying libraries need it
 os.environ["GEMINI_API_KEY"] = st.session_state["api_key"]
 
-# --- State Loading via Google Sheets ---
+# --- Book Selection UI ---
 try:
-    state = load_state_from_sheet()
+    available_books = get_all_books()
 except Exception as e:
     st.error("Google Sheetsへの接続設定が未完了です。")
-    st.info("`.streamlit/secrets.toml`を作成し、`[gcp_service_account]`および`[gsheets]`の設定を行ってください。詳細はGitHubのREADMEを参照してください。")
+    st.info("`.streamlit/info`")
+    st.stop()
+
+if not available_books:
+    available_books = ["デフォルトのミステリー"]
+
+st.sidebar.header("📕 ミステリーの選択")
+selected_book = st.sidebar.selectbox("記録する本を選んでください", options=available_books)
+
+new_book_name = st.sidebar.text_input("💡 新しい本を追加する")
+if st.sidebar.button("追加"):
+    if new_book_name and new_book_name not in available_books:
+        # Create an empty state for the new book
+        save_state_to_sheet(MysteryState(characters=[], timelines=[], items=[]), new_book_name)
+        st.session_state["current_book"] = new_book_name
+        st.rerun()
+
+if "current_book" not in st.session_state or (new_book_name and st.session_state["current_book"] == new_book_name):
+    pass # Will be handled below, default to selected
+    
+if "current_book" not in st.session_state:
+    st.session_state["current_book"] = selected_book
+
+# Update session state if the user changes the dropdown manually
+if selected_book != st.session_state.get("current_book"):
+    st.session_state["current_book"] = selected_book
+
+current_book = st.session_state["current_book"]
+
+# --- State Loading via Google Sheets ---
+try:
+    state = load_state_from_sheet(current_book)
+except Exception as e:
+    st.error(f"データの読み込みに失敗しました: {e}")
     st.stop()
 
 # --- Sidebar info & reset ---
-st.sidebar.header("現在の状態")
+st.sidebar.header(f"「{current_book}」の状態")
 st.sidebar.write(f"👥 登場人物: {len(state.characters)}人")
 st.sidebar.write(f"📝 イベント数: {len(state.timelines)}件")
 st.sidebar.write(f"🔍 アイテム数: {len(state.items)}件")
-if st.sidebar.button("状態をリセット (スプレッドシートを初期化)"):
-    # 空の状態で上書き保存してリセット
-    save_state_to_sheet(MysteryState(characters=[], timelines=[], items=[]))
+if st.sidebar.button("この本の状態をリセット"):
+    save_state_to_sheet(MysteryState(characters=[], timelines=[], items=[]), current_book)
     st.rerun()
 
 # --- Main Layout ---
@@ -145,7 +177,7 @@ if len(state.characters) > 0:
                         s_char.status = new_status
                         s_char.is_ignored = is_ignored
                         break
-                save_state_to_sheet(state)
+                save_state_to_sheet(state, current_book)
                 st.rerun()
 
     for char in active_chars:
@@ -183,7 +215,7 @@ if len(state.items) > 0:
                         s_item.current_possessor = new_possessor
                         s_item.is_ignored = is_ignored
                         break
-                save_state_to_sheet(state)
+                save_state_to_sheet(state, current_book)
                 st.rerun()
 
     # Render active items first
@@ -216,11 +248,11 @@ if len(state.timelines) > 0:
                 s_tl.event = n_evt
                 s_tl.involved_persons = n_pers
                 break
-        save_state_to_sheet(state)
+        save_state_to_sheet(state, current_book)
 
     def delete_timeline(uid):
         state.timelines = [t for t in state.timelines if t.uid != uid]
-        save_state_to_sheet(state)
+        save_state_to_sheet(state, current_book)
 
     for tl in sorted_timelines:
         key_prefix = f"tl_{tl.uid}"
