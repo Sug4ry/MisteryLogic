@@ -332,9 +332,9 @@ def generate_murder_board_graph(state: MysteryState, output_path: str, filter_su
         if filter_suspect and filter_suspect != "すべて" and filter_suspect not in [p1, p2]:
             is_dimmed = True
             
-        opacity = 0.15 if is_dimmed else 0.5
-        edge_color = f"rgba(149, 165, 166, {opacity})"
-        net.add_edge(p1, p2, color=edge_color, dashes=data["uncertain"], label="関係性", arrows="", font={"color": edge_color, "size": 8})
+        opacity = 0.2 if is_dimmed else 0.8
+        edge_color = f"rgba(236, 240, 241, {opacity})" # Bright standard line (Clouds white)
+        net.add_edge(p1, p2, color=edge_color, dashes=data["uncertain"], label="関係性", arrows="", font={"color": edge_color, "size": 10})
 
     net.set_options("""
     var options = {
