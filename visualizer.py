@@ -183,3 +183,175 @@ def generate_relationship_graph(state: MysteryState, chapter: int, output_path: 
     
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
+
+def generate_murder_board_graph(state: MysteryState, output_path: str):
+    net = Network(height="600px", width="100%", directed=True, notebook=False, bgcolor="#ffffff", font_color="black")
+    
+    # 1. Characters
+    active_characters = [c for c in state.characters if not getattr(c, 'is_ignored', False)]
+    active_char_names = {c.name for c in active_characters}
+    
+    for char in active_characters:
+        color = "#95A5A6" # Grey (不明)
+        if char.status == "生存":
+            color = "#2ECC71" # Green
+        elif char.status == "死亡":
+            color = "#E74C3C" # Red
+        
+        title = f"役割: {char.role}\n状態: {char.status}"
+        net.add_node(char.name, label=char.name, title=title, color=color, shape="ellipse")
+        
+    # 2. Motives
+    active_motives = getattr(state, 'motives', [])
+    active_motives = [m for m in active_motives if not getattr(m, 'is_ignored', False)]
+    for idx, motive in enumerate(active_motives):
+        node_id = f"motive_{idx}"
+        # Create a shorter label for the node
+        short_label = (motive.motive_content[:10] + '...') if len(motive.motive_content) > 10 else motive.motive_content
+        label = f"動機: {short_label}"
+        title = f"対象: {motive.suspect_name}\n内容: {motive.motive_content}\n強さ: {motive.strength}\n因縁: {motive.past_karma}"
+        net.add_node(node_id, label=label, title=title, color="#E67E22", shape="box")
+        
+        # connect suspect -> motive
+        if motive.suspect_name in active_char_names:
+            net.add_edge(motive.suspect_name, node_id, color="#E67E22", dashes=True)
+            
+    # 3. Evidences
+    active_evidences = getattr(state, 'evidences', [])
+    active_evidences = [e for e in active_evidences if not getattr(e, 'is_ignored', False)]
+    for idx, ev in enumerate(active_evidences):
+        node_id = f"evidence_{idx}"
+        label = f"証拠: {ev.name}"
+        title = f"発見場所: {ev.location_obtained}"
+        net.add_node(node_id, label=label, title=title, color="#3498DB", shape="hexagon")
+        
+        # connect character -> evidence
+        for p in ev.affirming_persons:
+            if p in active_char_names:
+                net.add_edge(node_id, p, color="#2ECC71", title="肯定/有利", arrows="to")
+        for p in ev.denying_persons:
+            if p in active_char_names:
+                net.add_edge(node_id, p, color="#E74C3C", title="否定/不利", arrows="to")
+                
+    net.set_options("""
+    var options = {
+      "interaction": {
+        "hover": true
+      },
+      "physics": {
+        "forceAtlas2Based": {
+          "gravitationalConstant": -100,
+          "centralGravity": 0.01,
+          "springLength": 200
+        },
+        "minVelocity": 0.75,
+        "solver": "forceAtlas2Based"
+      }
+    }
+    """)
+    net.save_graph(output_path)
+    
+    custom_css_js = """
+    <style>
+    /* Hide the default vis.js tooltip entirely */
+    .vis-tooltip {
+        display: none !important;
+    }
+    
+    /* Custom overlay for mobile-friendly scrollable info */
+    #custom-tooltip-overlay {
+        display: none;
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 250px;
+        max-height: 80%;
+        overflow-y: auto;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        padding: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        z-index: 9999;
+        font-size: 14px;
+        pointer-events: auto; /* allow touching/scrolling */
+        touch-action: pan-y;
+    }
+    
+    /* Close button for mobile */
+    #custom-tooltip-close {
+        float: right;
+        cursor: pointer;
+        font-weight: bold;
+        color: #888;
+        font-size: 18px;
+        line-height: 1;
+        margin-left: 10px;
+    }
+    </style>
+    
+    <div id="custom-tooltip-overlay">
+        <span id="custom-tooltip-close">&times;</span>
+        <div id="custom-tooltip-content"></div>
+    </div>
+    
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Wait for network to be initialized by vis.js
+        var checkNetwork = setInterval(function() {
+            if (typeof network !== 'undefined' && typeof nodes !== 'undefined') {
+                clearInterval(checkNetwork);
+                
+                var overlay = document.getElementById("custom-tooltip-overlay");
+                var content = document.getElementById("custom-tooltip-content");
+                var closeBtn = document.getElementById("custom-tooltip-close");
+                
+                function showTooltip(nodeId) {
+                    var node = nodes.get(nodeId);
+                    if(node && node.title) {
+                        content.innerHTML = "<strong>" + node.label + "</strong><br><hr style='margin: 5px 0'>" + node.title.replace(/\\n/g, "<br>");
+                        overlay.style.display = "block";
+                    }
+                }
+                
+                network.on("click", function (params) {
+                    if(params.nodes.length > 0) {
+                        showTooltip(params.nodes[0]);
+                    } else {
+                        overlay.style.display = "none";
+                    }
+                });
+                
+                network.on("hoverNode", function (params) {
+                    showTooltip(params.node);
+                });
+                
+                closeBtn.onclick = function() {
+                    overlay.style.display = "none";
+                };
+            }
+        }, 200);
+        
+        var stopProp = function(e) {
+            if (e.target.closest('#custom-tooltip-overlay')) {
+                e.stopPropagation();
+            }
+        };
+        document.addEventListener('wheel', stopProp, {capture: true, passive: false});
+        document.addEventListener('touchstart', stopProp, {capture: true, passive: false});
+        document.addEventListener('touchmove', stopProp, {capture: true, passive: false});
+        document.addEventListener('touchend', stopProp, {capture: true, passive: false});
+    });
+    </script>
+    """
+    
+    with open(output_path, "r", encoding="utf-8") as f:
+        html = f.read()
+        
+    if "</body>" in html:
+        html = html.replace("</body>", f"{custom_css_js}</body>")
+    else:
+        html += custom_css_js
+    
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html)

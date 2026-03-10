@@ -1,8 +1,8 @@
 import streamlit as st
 import os
 from models import MysteryState
-from analyzer import analyze_notes
-from visualizer import generate_relationship_graph
+from analyzer import analyze_notes, generate_hypothesis
+from visualizer import generate_relationship_graph, generate_murder_board_graph
 import streamlit.components.v1 as components
 from sheets_db import load_state_from_sheet, save_state_to_sheet, get_all_books
 
@@ -87,6 +87,9 @@ st.sidebar.header(f"「{current_book}」の状態")
 st.sidebar.write(f"👥 登場人物: {len(state.characters)}人")
 st.sidebar.write(f"📝 イベント数: {len(state.timelines)}件")
 st.sidebar.write(f"🔍 アイテム数: {len(state.items)}件")
+st.sidebar.write(f"🧩 トリック/謎: {len(getattr(state, 'tricks', []))}件")
+st.sidebar.write(f"🖤 動機: {len(getattr(state, 'motives', []))}件")
+st.sidebar.write(f"💼 証拠: {len(getattr(state, 'evidences', []))}件")
 if st.sidebar.button("この本の状態をリセット"):
     save_state_to_sheet(MysteryState(characters=[], timelines=[], items=[]), current_book)
     st.rerun()
@@ -134,19 +137,27 @@ with col1:
                 st.warning(w)
 
 with col2:
-    st.subheader("人物相関図")
+    st.subheader("可視化ボード")
     view_chapter = st.number_input("表示する章番号", min_value=1, value=chapter_num, step=1, key="view_chap")
     
     if len(state.characters) > 0:
-        # Auto-generate graph
-        output_html = "graph.html"
-        generate_relationship_graph(state, view_chapter, output_html)
+        tab_graph, tab_board = st.tabs(["相関図", "捜査ボード"])
         
-        with open(output_html, "r", encoding="utf-8") as f:
-            html_data = f.read()
-        
-        st.markdown("**(緑: 生存 / 赤: 死亡 / 灰: 不明)** | ノードをホバーで詳細表示")
-        components.html(html_data, height=550)
+        with tab_graph:
+            output_html = "graph.html"
+            generate_relationship_graph(state, view_chapter, output_html)
+            with open(output_html, "r", encoding="utf-8") as f:
+                html_data = f.read()
+            st.markdown("**(緑: 生存 / 赤: 死亡 / 灰: 不明)** | ノードをホバーで詳細表示")
+            components.html(html_data, height=550)
+            
+        with tab_board:
+            output_board_html = "board.html"
+            generate_murder_board_graph(state, output_board_html)
+            with open(output_board_html, "r", encoding="utf-8") as f:
+                board_html_data = f.read()
+            st.markdown("**(緑: 肯定・有利 / 赤: 否定・不利 / 橙: 動機 / 青: 証拠)**")
+            components.html(board_html_data, height=550)
     else:
         st.info("まだデータがありません。メモを入力して解析してください。")
 
@@ -230,6 +241,110 @@ if len(state.items) > 0:
 
 else:
     st.info("現在追跡中のアイテムはありません。")
+
+st.markdown("---")
+st.subheader("🧩 トリック・謎")
+tricks_list = getattr(state, "tricks", [])
+if len(tricks_list) > 0:
+    active_tricks = [t for t in tricks_list if not getattr(t, 'is_ignored', False)]
+    ignored_tricks = [t for t in tricks_list if getattr(t, 'is_ignored', False)]
+    
+    def render_trick(trick, is_ignored_section=False):
+        key_prefix = f"trick_{'ignored' if is_ignored_section else 'active'}_{trick.name}"
+        with st.expander(f"{'❌ ' if getattr(trick, 'is_ignored', False) else ''}{trick.name}"):
+            st.markdown(f"**使用凶器:** {trick.weapon}")
+            st.markdown(f"**未解明の矛盾:** {', '.join(trick.unresolved_contradictions)}")
+            updated_method = st.text_input("手法/実行方法を編集:", value=trick.method, key=f"{key_prefix}_method")
+            is_ignored = st.checkbox("この謎を推理から除外する", value=getattr(trick, 'is_ignored', False), key=f"{key_prefix}_ignored")
+            
+            if updated_method != trick.method or is_ignored != getattr(trick, 'is_ignored', False):
+                for s_t in state.tricks:
+                    if s_t.name == trick.name:
+                        s_t.method = updated_method
+                        s_t.is_ignored = is_ignored
+                        break
+                save_state_to_sheet(state, current_book)
+                st.rerun()
+
+    for t in active_tricks: render_trick(t)
+    if ignored_tricks:
+        st.markdown("##### 📦 除外された謎")
+        for t in ignored_tricks: render_trick(t, True)
+else:
+    st.info("トリックや謎はまだ抽出されていません。")
+
+st.markdown("---")
+st.subheader("🖤 動機")
+motives_list = getattr(state, "motives", [])
+if len(motives_list) > 0:
+    active_motives = [m for m in motives_list if not getattr(m, 'is_ignored', False)]
+    ignored_motives = [m for m in motives_list if getattr(m, 'is_ignored', False)]
+    
+    def render_motive(motive, is_ignored_section=False):
+        key_prefix = f"motive_{'ignored' if is_ignored_section else 'active'}_{motive.suspect_name}_{motive.strength}"
+        with st.expander(f"{'❌ ' if getattr(motive, 'is_ignored', False) else ''}{motive.suspect_name} (強さ: {motive.strength})"):
+            st.markdown(f"**内容:** {motive.motive_content}")
+            st.markdown(f"**因縁:** {motive.past_karma}")
+            is_ignored = st.checkbox("この動機を推理から除外する", value=getattr(motive, 'is_ignored', False), key=f"{key_prefix}_ignored")
+            
+            if is_ignored != getattr(motive, 'is_ignored', False):
+                for s_m in state.motives:
+                    if s_m.suspect_name == motive.suspect_name and s_m.motive_content == motive.motive_content:
+                        s_m.is_ignored = is_ignored
+                        break
+                save_state_to_sheet(state, current_book)
+                st.rerun()
+
+    for m in active_motives: render_motive(m)
+    if ignored_motives:
+        st.markdown("##### 📦 除外された動機")
+        for m in ignored_motives: render_motive(m, True)
+else:
+    st.info("動機はまだ抽出されていません。")
+
+st.markdown("---")
+st.subheader("💼 証拠")
+evidences_list = getattr(state, "evidences", [])
+if len(evidences_list) > 0:
+    active_evidences = [e for e in evidences_list if not getattr(e, 'is_ignored', False)]
+    ignored_evidences = [e for e in evidences_list if getattr(e, 'is_ignored', False)]
+    
+    def render_evidence(evidence, is_ignored_section=False):
+        key_prefix = f"evidence_{'ignored' if is_ignored_section else 'active'}_{evidence.name}"
+        with st.expander(f"{'❌ ' if getattr(evidence, 'is_ignored', False) else ''}{evidence.name} (発見場所: {evidence.location_obtained})"):
+            st.markdown(f"**肯定/有利:** {', '.join(evidence.affirming_persons)}")
+            st.markdown(f"**否定/不利:** {', '.join(evidence.denying_persons)}")
+            is_ignored = st.checkbox("この証拠を推理から除外する", value=getattr(evidence, 'is_ignored', False), key=f"{key_prefix}_ignored")
+            
+            if is_ignored != getattr(evidence, 'is_ignored', False):
+                for s_e in state.evidences:
+                    if s_e.name == evidence.name:
+                        s_e.is_ignored = is_ignored
+                        break
+                save_state_to_sheet(state, current_book)
+                st.rerun()
+
+    for e in active_evidences: render_evidence(e)
+    if ignored_evidences:
+        st.markdown("##### 📦 除外された証拠")
+        for e in ignored_evidences: render_evidence(e, True)
+else:
+    st.info("証拠はまだ抽出されていません。")
+
+st.markdown("---")
+st.subheader("💡 仮説生成モード")
+active_char_names_for_hyp = [c.name for c in state.characters if not getattr(c, 'is_ignored', False)]
+if active_char_names_for_hyp:
+    target_suspect = st.selectbox("犯人と仮定する人物を選択:", options=active_char_names_for_hyp)
+    if st.button("仮説シミュレーションを実行"):
+        with st.spinner(f"{target_suspect} 犯行説を検証中..."):
+            try:
+                hyp_result = generate_hypothesis(state, target_suspect, st.session_state["api_key"])
+                st.markdown(hyp_result)
+            except Exception as e:
+                st.error(f"シミュレーションエラー: {e}")
+else:
+    st.info("人物データがありません。")
 
 st.markdown("---")
 st.subheader("🕰️ イベント履歴")

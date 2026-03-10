@@ -30,11 +30,39 @@ class Item(BaseModel):
     current_possessor: str = Field(description="現在そのアイテムを所持している人物の名前。不明な場合や共有の場所に保管されている場合はその状況。")
     is_ignored: bool = Field(default=False, description="このアイテムが推理に不要と手動でマークされているかどうか。")
 
+class Trick(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str = Field(description="トリックや謎の名称（例：「密室トリック」「凶器の消失」）")
+    method: str = Field(description="推測される手法や実行方法。未解明の場合はその旨を記載。")
+    weapon: str = Field(description="使用された凶器。未解明の場合はその旨を記載。")
+    unresolved_contradictions: List[str] = Field(description="現状で未解明の矛盾点や謎のリスト。")
+    related_evidences: List[str] = Field(description="このトリックや謎に関連する証拠の名称リスト。")
+    is_ignored: bool = Field(default=False, description="このトリックを推理から除外するかどうか。")
+
+class Motive(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    suspect_name: str = Field(description="この動機を持つと推測される人物の名前。")
+    motive_content: str = Field(description="動機の詳細内容（怨恨、金銭、口封じなど）。")
+    strength: int = Field(description="動機の強さ（1から5までの数値。5が最も強い）。")
+    past_karma: str = Field(description="動機に関連する過去の因縁や出来事。")
+    is_ignored: bool = Field(default=False, description="この動機を推理から除外するかどうか。")
+
+class Evidence(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    name: str = Field(description="証拠の名称。")
+    location_obtained: str = Field(description="証拠が入手・発見された場所。")
+    affirming_persons: List[str] = Field(description="この証拠によって主張やアリバイが肯定される・有利になる人物のリスト。")
+    denying_persons: List[str] = Field(description="この証拠によって主張やアリバイが否定される・不利になる人物のリスト。")
+    is_ignored: bool = Field(default=False, description="この証拠を推理から除外するかどうか。")
+
 class MysteryState(BaseModel):
     model_config = ConfigDict(extra='forbid')
     characters: List[Character] = Field(default_factory=list, description="物語の登場人物のリスト。")
     timelines: List[Timeline] = Field(default_factory=list, description="物語の時系列イベント。")
     items: List[Item] = Field(default_factory=list, description="物語に登場する重要なアイテムのリスト。")
+    tricks: List[Trick] = Field(default_factory=list, description="物語のトリックや謎解き要素のリスト。")
+    motives: List[Motive] = Field(default_factory=list, description="登場人物の動機のリスト。")
+    evidences: List[Evidence] = Field(default_factory=list, description="事件に関する証拠のリスト。")
 
     @classmethod
     def load_from_json(cls, filepath: str) -> 'MysteryState':
