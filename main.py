@@ -6,10 +6,21 @@ from visualizer import generate_relationship_graph, generate_murder_board_graph
 import streamlit.components.v1 as components
 from sheets_db import load_state_from_sheet, save_state_to_sheet, get_all_books
 
-st.set_page_config(page_title="Mystery Logic Analyzer", layout="wide", page_icon="🕵️")
+st.set_page_config(page_title="Mystery Logic Analyzer", layout="wide", page_icon="🕵️", initial_sidebar_state="expanded")
+
+# --- Custom CSS for Darker Theme Alignments ---
+st.markdown("""
+<style>
+/* Make Streamlit closer to the dark theme board */
+.stApp {
+    background-color: #121212;
+    color: #ecf0f1;
+}
+</style>
+""", unsafe_allow_html=True)
 
 st.title("🕵️ Mystery Logic Analyzer")
-st.markdown("ミステリー小説の断片的なメモから情報を抽出し、矛盾を検知して相関図を生成します。")
+st.markdown("ミステリー小説の断片的なメモから情報を抽出し、矛盾を検知して本格的な捜査ボードを生成します。")
 
 # --- Authentication & API Key check ---
 if "api_key" not in st.session_state:
@@ -94,6 +105,15 @@ if st.sidebar.button("この本の状態をリセット"):
     save_state_to_sheet(MysteryState(characters=[], timelines=[], items=[]), current_book)
     st.rerun()
 
+# --- Suspect Filter ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("🎯 容疑者フィルタ")
+filter_suspect = "すべて"
+if len(state.characters) > 0:
+    active_char_names_for_filter = ["すべて"] + [c.name for c in state.characters if not getattr(c, 'is_ignored', False)]
+    filter_suspect = st.sidebar.selectbox("特定の人物に関連する要素を強調", options=active_char_names_for_filter)
+st.sidebar.markdown("*(選んだ人物に関連する線や証拠のみ強調表示されます)*")
+
 # --- Main Layout ---
 col1, col2 = st.columns([4, 6])
 
@@ -138,26 +158,61 @@ with col1:
 
 with col2:
     st.subheader("可視化ボード")
-    view_chapter = st.number_input("表示する章番号", min_value=1, value=chapter_num, step=1, key="view_chap")
     
     if len(state.characters) > 0:
-        tab_graph, tab_board = st.tabs(["相関図", "捜査ボード"])
+        tab_board, tab_timeline = st.tabs(["捜査ボード表示", "タイムライン表示"])
         
-        with tab_graph:
-            output_html = "graph.html"
-            generate_relationship_graph(state, view_chapter, output_html)
-            with open(output_html, "r", encoding="utf-8") as f:
-                html_data = f.read()
-            st.markdown("**(緑: 生存 / 赤: 死亡 / 灰: 不明)** | ノードをホバーで詳細表示")
-            components.html(html_data, height=550)
-            
         with tab_board:
             output_board_html = "board.html"
-            generate_murder_board_graph(state, output_board_html)
+            generate_murder_board_graph(state, output_board_html, filter_suspect=filter_suspect)
             with open(output_board_html, "r", encoding="utf-8") as f:
                 board_html_data = f.read()
-            st.markdown("**(緑: 肯定・有利 / 赤: 否定・不利 / 橙: 動機 / 青: 証拠)**")
-            components.html(board_html_data, height=550)
+            st.markdown("**(緑:生存・有利 / 赤:死亡・不利 / 橙:動機 / 青:証拠 / 点線:不確実・推論)**")
+            components.html(board_html_data, height=650)
+            
+        with tab_timeline:
+            st.markdown("### 🕰️ イベント履歴")
+            if len(state.timelines) > 0:
+                sorted_timelines = sorted(state.timelines, key=lambda x: x.chapter_number)
+                
+                def save_timeline_edit(uid, chap_key, loc_key, event_key, persons_key):
+                    n_chap = st.session_state[chap_key]
+                    n_loc = st.session_state[loc_key]
+                    n_evt = st.session_state[event_key]
+                    n_pers = [p.strip() for p in st.session_state[persons_key].split(",") if p.strip()]
+                    for s_tl in state.timelines:
+                        if s_tl.uid == uid:
+                            s_tl.chapter_number = n_chap
+                            s_tl.location = n_loc
+                            s_tl.event = n_evt
+                            s_tl.involved_persons = n_pers
+                            break
+                    save_state_to_sheet(state, current_book)
+
+                def delete_timeline(uid):
+                    state.timelines = [t for t in state.timelines if t.uid != uid]
+                    save_state_to_sheet(state, current_book)
+
+                for tl in sorted_timelines:
+                    key_prefix = f"tl_{tl.uid}"
+                    uncertain_mark = "👻(不確実) " if getattr(tl, 'uncertainty', False) else ""
+                    with st.expander(f"【第{tl.chapter_number}章】 📍{tl.location} - {uncertain_mark}{tl.event[:20]}..."):
+                        
+                        st.number_input("発生章", min_value=1, value=tl.chapter_number, step=1, key=f"{key_prefix}_chap_input")
+                        st.text_input("場所", value=tl.location, key=f"{key_prefix}_loc_input")
+                        st.text_area("出来事の内容", value=tl.event, key=f"{key_prefix}_event_input")
+                        
+                        persons_str = ", ".join(tl.involved_persons)
+                        st.text_input("関与者 (カンマ区切り)", value=persons_str, key=f"{key_prefix}_persons_input")
+                        
+                        col_a, col_b = st.columns([8, 2])
+                        with col_a:
+                            st.button("💾 変更を保存", key=f"{key_prefix}_save_btn", on_click=save_timeline_edit, args=(tl.uid, f"{key_prefix}_chap_input", f"{key_prefix}_loc_input", f"{key_prefix}_event_input", f"{key_prefix}_persons_input"))
+                                
+                        with col_b:
+                            st.button("🗑️ 削除", key=f"{key_prefix}_del_btn", on_click=delete_timeline, args=(tl.uid,))
+            else:
+                st.info("過去のイベントはまだ記録されていません。")
     else:
         st.info("まだデータがありません。メモを入力して解析してください。")
 
@@ -346,49 +401,7 @@ if active_char_names_for_hyp:
 else:
     st.info("人物データがありません。")
 
-st.markdown("---")
-st.subheader("🕰️ イベント履歴")
-if len(state.timelines) > 0:
-    sorted_timelines = sorted(state.timelines, key=lambda x: x.chapter_number)
-    
-    def save_timeline_edit(uid, chap_key, loc_key, event_key, persons_key):
-        n_chap = st.session_state[chap_key]
-        n_loc = st.session_state[loc_key]
-        n_evt = st.session_state[event_key]
-        n_pers = [p.strip() for p in st.session_state[persons_key].split(",") if p.strip()]
-        for s_tl in state.timelines:
-            if s_tl.uid == uid:
-                s_tl.chapter_number = n_chap
-                s_tl.location = n_loc
-                s_tl.event = n_evt
-                s_tl.involved_persons = n_pers
-                break
-        save_state_to_sheet(state, current_book)
-
-    def delete_timeline(uid):
-        state.timelines = [t for t in state.timelines if t.uid != uid]
-        save_state_to_sheet(state, current_book)
-
-    for tl in sorted_timelines:
-        key_prefix = f"tl_{tl.uid}"
-        with st.expander(f"【第{tl.chapter_number}章】 📍{tl.location} - {tl.event[:20]}..."):
-            
-            st.number_input("発生章", min_value=1, value=tl.chapter_number, step=1, key=f"{key_prefix}_chap_input")
-            st.text_input("場所", value=tl.location, key=f"{key_prefix}_loc_input")
-            st.text_area("出来事の内容", value=tl.event, key=f"{key_prefix}_event_input")
-            
-            persons_str = ", ".join(tl.involved_persons)
-            st.text_input("関与者 (カンマ区切り)", value=persons_str, key=f"{key_prefix}_persons_input")
-            
-            col_a, col_b = st.columns([8, 2])
-            with col_a:
-                st.button("💾 変更を保存", key=f"{key_prefix}_save_btn", on_click=save_timeline_edit, args=(tl.uid, f"{key_prefix}_chap_input", f"{key_prefix}_loc_input", f"{key_prefix}_event_input", f"{key_prefix}_persons_input"))
-                    
-            with col_b:
-                st.button("🗑️ 削除", key=f"{key_prefix}_del_btn", on_click=delete_timeline, args=(tl.uid,))
-        
-else:
-    st.info("過去のイベントはまだ記録されていません。")
+# Note: Events history moved to Timeline Tab
 
 st.markdown("---")
 st.subheader("現在の生データ (JSON)")

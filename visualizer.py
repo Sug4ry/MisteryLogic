@@ -184,68 +184,184 @@ def generate_relationship_graph(state: MysteryState, chapter: int, output_path: 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
 
-def generate_murder_board_graph(state: MysteryState, output_path: str):
-    net = Network(height="600px", width="100%", directed=True, notebook=False, bgcolor="#ffffff", font_color="black")
+def generate_murder_board_graph(state: MysteryState, output_path: str, filter_suspect: str = None):
+    # Dark mode config
+    bgcolor = "#1e1e1e"
+    font_color = "#ffffff"
     
-    # 1. Characters
+    net = Network(height="600px", width="100%", directed=True, notebook=False, bgcolor=bgcolor, font_color=font_color)
+    
+    # Pre-gather data
     active_characters = [c for c in state.characters if not getattr(c, 'is_ignored', False)]
     active_char_names = {c.name for c in active_characters}
     
-    for char in active_characters:
-        color = "#95A5A6" # Grey (不明)
-        if char.status == "生存":
-            color = "#2ECC71" # Green
-        elif char.status == "死亡":
-            color = "#E74C3C" # Red
-        
-        title = f"役割: {char.role}\n状態: {char.status}"
-        net.add_node(char.name, label=char.name, title=title, color=color, shape="ellipse")
-        
-    # 2. Motives
     active_motives = getattr(state, 'motives', [])
     active_motives = [m for m in active_motives if not getattr(m, 'is_ignored', False)]
+    
+    active_evidences = getattr(state, 'evidences', [])
+    active_evidences = [e for e in active_evidences if not getattr(e, 'is_ignored', False)]
+    
+    active_timelines = getattr(state, 'timelines', [])
+    
+    # 1. Characters
+    for char in active_characters:
+        # Dimming logic based on filter
+        is_dimmed = False
+        if filter_suspect and filter_suspect != "すべて":
+            # Check if char is connected to the filtered suspect
+            connected = False
+            if char.name == filter_suspect:
+                connected = True
+            else:
+                # Check motives
+                for m in active_motives:
+                    if (m.suspect_name == filter_suspect and char.name in m.motive_content) or \
+                       (m.suspect_name == char.name and filter_suspect in m.motive_content):
+                        connected = True
+                # Check evidences
+                for e in active_evidences:
+                    if (filter_suspect in e.affirming_persons + e.denying_persons) and \
+                       (char.name in e.affirming_persons + e.denying_persons):
+                        connected = True
+                # Check timelines
+                for tl in active_timelines:
+                    if filter_suspect in tl.involved_persons and char.name in tl.involved_persons:
+                        connected = True
+            if not connected:
+                is_dimmed = True
+
+        # Icons & Colors
+        color = "#7f8c8d" # 灰: 不明
+        icon = "❓"
+        mass = 1
+        
+        if char.status == "生存":
+            color = "#27ae60" # 緑
+            icon = "👤"
+            if char.role and "主人公" in char.role or "探偵" in char.role:
+                icon = "🕵️"
+        elif char.status == "死亡":
+            color = "#c0392b" # 赤
+            icon = "💀"
+            mass = 5 # Victims are heavier, stay near center
+            
+        if getattr(char, 'uncertainty', False):
+            icon = "👻" # Uncertain person
+            
+        opacity = 0.2 if is_dimmed else 1.0
+        
+        # Apply opacity to hex color
+        rgba_color = f"rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, {opacity})"
+        
+        label = f"{icon} {char.name}"
+        title = f"役割: {char.role}\n状態: {char.status}"
+        
+        net.add_node(char.name, label=label, title=title, color=rgba_color, shape="ellipse", mass=mass)
+        
+    # 2. Motives
     for idx, motive in enumerate(active_motives):
         node_id = f"motive_{idx}"
-        # Create a shorter label for the node
+        
+        is_dimmed = False
+        if filter_suspect and filter_suspect != "すべて" and motive.suspect_name != filter_suspect:
+            is_dimmed = True
+            
+        opacity = 0.2 if is_dimmed else 1.0
+        color = f"rgba(230, 126, 34, {opacity})" # Orange
+        
         short_label = (motive.motive_content[:10] + '...') if len(motive.motive_content) > 10 else motive.motive_content
-        label = f"動機: {short_label}"
+        icon = "💡"
+        label = f"{icon} {short_label}"
         title = f"対象: {motive.suspect_name}\n内容: {motive.motive_content}\n強さ: {motive.strength}\n因縁: {motive.past_karma}"
-        net.add_node(node_id, label=label, title=title, color="#E67E22", shape="box")
+        
+        net.add_node(node_id, label=label, title=title, color=color, shape="box")
         
         # connect suspect -> motive
         if motive.suspect_name in active_char_names:
-            net.add_edge(motive.suspect_name, node_id, color="#E67E22", dashes=True)
+            uncertain = getattr(motive, 'uncertainty', False)
+            edge_color = f"rgba(230, 126, 34, {opacity})"
+            net.add_edge(motive.suspect_name, node_id, color=edge_color, dashes=uncertain, label="Why/動機", font={"color": edge_color, "size": 10})
             
     # 3. Evidences
-    active_evidences = getattr(state, 'evidences', [])
-    active_evidences = [e for e in active_evidences if not getattr(e, 'is_ignored', False)]
     for idx, ev in enumerate(active_evidences):
         node_id = f"evidence_{idx}"
-        label = f"証拠: {ev.name}"
+        
+        is_dimmed = False
+        if filter_suspect and filter_suspect != "すべて" and filter_suspect not in ev.affirming_persons + ev.denying_persons:
+            is_dimmed = True
+            
+        opacity = 0.2 if is_dimmed else 1.0
+        color = f"rgba(52, 152, 219, {opacity})" # Blue
+        
+        icon = "🔍"
+        label = f"{icon} {ev.name}"
         title = f"発見場所: {ev.location_obtained}"
-        net.add_node(node_id, label=label, title=title, color="#3498DB", shape="hexagon")
+        
+        net.add_node(node_id, label=label, title=title, color=color, shape="hexagon")
+        
+        uncertain = getattr(ev, 'uncertainty', False)
         
         # connect character -> evidence
         for p in ev.affirming_persons:
             if p in active_char_names:
-                net.add_edge(node_id, p, color="#2ECC71", title="肯定/有利", arrows="to")
+                edge_color = f"rgba(46, 204, 113, {opacity})" # Green
+                net.add_edge(node_id, p, color=edge_color, dashes=uncertain, label="肯定/アリバイ", arrows="to", font={"color": edge_color, "size": 10})
         for p in ev.denying_persons:
             if p in active_char_names:
-                net.add_edge(node_id, p, color="#E74C3C", title="否定/不利", arrows="to")
-                
+                edge_color = f"rgba(231, 76, 60, {opacity})" # Red
+                net.add_edge(node_id, p, color=edge_color, dashes=uncertain, label="否定/不利", arrows="to", font={"color": edge_color, "size": 10})
+
+    # 4. Person to Person relationships (from timelines)
+    interactions = {}
+    for tl in active_timelines:
+        uncertain = getattr(tl, 'uncertainty', False)
+        people = tl.involved_persons
+        for i in range(len(people)):
+            for j in range(i + 1, len(people)):
+                p1, p2 = people[i], people[j]
+                if p1 in active_char_names and p2 in active_char_names:
+                    edge = tuple(sorted([p1, p2]))
+                    if edge not in interactions:
+                        interactions[edge] = {"count": 1, "uncertain": uncertain}
+                    else:
+                        interactions[edge]["count"] += 1
+                        interactions[edge]["uncertain"] = interactions[edge]["uncertain"] and uncertain
+
+    for (p1, p2), data in interactions.items():
+        is_dimmed = False
+        if filter_suspect and filter_suspect != "すべて" and filter_suspect not in [p1, p2]:
+            is_dimmed = True
+            
+        opacity = 0.15 if is_dimmed else 0.5
+        edge_color = f"rgba(149, 165, 166, {opacity})"
+        net.add_edge(p1, p2, color=edge_color, dashes=data["uncertain"], label="関係性", arrows="", font={"color": edge_color, "size": 8})
+
     net.set_options("""
     var options = {
+      "nodes": {
+        "borderWidth": 2,
+        "shadow": true
+      },
+      "edges": {
+        "smooth": {
+          "type": "dynamic"
+        },
+        "shadow": true
+      },
       "interaction": {
-        "hover": true
+        "hover": true,
+        "tooltipDelay": 200
       },
       "physics": {
         "forceAtlas2Based": {
-          "gravitationalConstant": -100,
-          "centralGravity": 0.01,
-          "springLength": 200
+          "gravitationalConstant": -150,
+          "centralGravity": 0.02,
+          "springLength": 250,
+          "springConstant": 0.05
         },
         "minVelocity": 0.75,
-        "solver": "forceAtlas2Based"
+        "solver": "forceAtlas2Based",
+        "timestep": 0.35
       }
     }
     """)
@@ -258,24 +374,26 @@ def generate_murder_board_graph(state: MysteryState, output_path: str):
         display: none !important;
     }
     
-    /* Custom overlay for mobile-friendly scrollable info */
+    /* Custom overlay for mobile-friendly scrollable info, themed for dark mode */
     #custom-tooltip-overlay {
         display: none;
         position: absolute;
         top: 10px;
         right: 10px;
-        width: 250px;
+        width: 300px;
         max-height: 80%;
         overflow-y: auto;
-        background: rgba(255, 255, 255, 0.95);
-        border: 1px solid #ccc;
+        background: rgba(30, 30, 30, 0.95);
+        color: #ecf0f1;
+        border: 1px solid #7f8c8d;
         border-radius: 8px;
         padding: 15px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        box-shadow: 0 8px 16px rgba(0,0,0,0.5);
         z-index: 9999;
         font-size: 14px;
         pointer-events: auto; /* allow touching/scrolling */
         touch-action: pan-y;
+        font-family: 'Courier New', Courier, monospace;
     }
     
     /* Close button for mobile */
@@ -283,10 +401,13 @@ def generate_murder_board_graph(state: MysteryState, output_path: str):
         float: right;
         cursor: pointer;
         font-weight: bold;
-        color: #888;
+        color: #bdc3c7;
         font-size: 18px;
         line-height: 1;
         margin-left: 10px;
+    }
+    #custom-tooltip-close:hover {
+        color: #e74c3c;
     }
     </style>
     
@@ -309,7 +430,7 @@ def generate_murder_board_graph(state: MysteryState, output_path: str):
                 function showTooltip(nodeId) {
                     var node = nodes.get(nodeId);
                     if(node && node.title) {
-                        content.innerHTML = "<strong>" + node.label + "</strong><br><hr style='margin: 5px 0'>" + node.title.replace(/\\n/g, "<br>");
+                        content.innerHTML = "<strong style='color:#f39c12; font-size:16px;'>" + node.label + "</strong><br><hr style='margin: 8px 0; border-color:#7f8c8d;'>" + node.title.replace(/\\n/g, "<br><br>");
                         overlay.style.display = "block";
                     }
                 }
