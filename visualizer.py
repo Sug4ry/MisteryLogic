@@ -353,15 +353,25 @@ def generate_murder_board_graph(state: MysteryState, output_path: str, filter_su
         "tooltipDelay": 200
       },
       "physics": {
+        "enabled": true,
         "forceAtlas2Based": {
-          "gravitationalConstant": -150,
-          "centralGravity": 0.02,
-          "springLength": 250,
-          "springConstant": 0.05
+          "gravitationalConstant": -60,
+          "centralGravity": 0.01,
+          "springLength": 200,
+          "springConstant": 0.08,
+          "damping": 0.9,
+          "avoidOverlap": 1
         },
-        "minVelocity": 0.75,
+        "minVelocity": 2.0,
+        "maxVelocity": 50,
         "solver": "forceAtlas2Based",
-        "timestep": 0.35
+        "timestep": 0.4,
+        "stabilization": {
+          "enabled": true,
+          "iterations": 300,
+          "updateInterval": 50,
+          "fit": true
+        }
       }
     }
     """)
@@ -435,6 +445,11 @@ def generate_murder_board_graph(state: MysteryState, output_path: str, filter_su
                     }
                 }
                 
+                // Stop physics after stabilization completes (prevents endless spinning)
+                network.once("stabilizationIterationsDone", function () {
+                    network.setOptions({ physics: { enabled: false } });
+                });
+
                 network.on("click", function (params) {
                     if(params.nodes.length > 0) {
                         showTooltip(params.nodes[0]);
