@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 from models import MysteryState
-from analyzer import analyze_notes, generate_hypothesis
+from analyzer import analyze_notes, generate_hypothesis, generate_item_hypothesis
 from visualizer import generate_relationship_graph, generate_murder_board_graph
 import streamlit.components.v1 as components
 from sheets_db import load_state_from_sheet, save_state_to_sheet, get_all_books
@@ -388,18 +388,57 @@ else:
 
 st.markdown("---")
 st.subheader("💡 仮説生成モード")
-active_char_names_for_hyp = [c.name for c in state.characters if not getattr(c, 'is_ignored', False)]
-if active_char_names_for_hyp:
-    target_suspect = st.selectbox("犯人と仮定する人物を選択:", options=active_char_names_for_hyp)
-    if st.button("仮説シミュレーションを実行"):
-        with st.spinner(f"{target_suspect} 犯行説を検証中..."):
-            try:
-                hyp_result = generate_hypothesis(state, target_suspect, st.session_state["api_key"])
-                st.markdown(hyp_result)
-            except Exception as e:
-                st.error(f"シミュレーションエラー: {e}")
-else:
-    st.info("人物データがありません。")
+
+tab_suspect_hyp, tab_item_hyp = st.tabs(["🔪 犯人仮説", "🎁 アイテム謎解き"])
+
+with tab_suspect_hyp:
+    active_char_names_for_hyp = [c.name for c in state.characters if not getattr(c, 'is_ignored', False)]
+    if active_char_names_for_hyp:
+        target_suspect = st.selectbox("犯人と仮定する人物を選択:", options=active_char_names_for_hyp, key="hyp_suspect_select")
+        if st.button("仮説シミュレーションを実行", key="hyp_suspect_btn"):
+            with st.spinner(f"{target_suspect} 犯行説を検証中..."):
+                try:
+                    hyp_result = generate_hypothesis(state, target_suspect, st.session_state["api_key"])
+                    st.markdown(hyp_result)
+                except Exception as e:
+                    st.error(f"シミュレーションエラー: {e}")
+    else:
+        st.info("人物データがありません。")
+
+with tab_item_hyp:
+    # uncertainty=True かつ is_ignored=False のアイテムのみを候補とする
+    mysterious_items = [
+        i for i in state.items
+        if getattr(i, 'uncertainty', False) and not getattr(i, 'is_ignored', False)
+    ]
+    if mysterious_items:
+        st.markdown("正体が不明（不確実）なアイテムを選択し、Gemini に推測させます。")
+        target_item_name = st.selectbox(
+            "謎のアイテムを選択:",
+            options=[i.name for i in mysterious_items],
+            key="hyp_item_select"
+        )
+        # 選択されたアイテムの現在の情報をプレビュー表示
+        selected_item = next((i for i in mysterious_items if i.name == target_item_name), None)
+        if selected_item:
+            with st.expander("📋 アイテム情報プレビュー", expanded=False):
+                st.markdown(f"**説明:** {selected_item.description}")
+                st.markdown(f"**発見場所:** {selected_item.location_found}")
+                st.markdown(f"**現在の所持者:** {selected_item.current_possessor}")
+        if st.button("アイテムの正体を推測する", key="hyp_item_btn", type="primary"):
+            with st.spinner(f"「{target_item_name}」の正体を推理中..."):
+                try:
+                    item_hyp_result = generate_item_hypothesis(state, target_item_name, st.session_state["api_key"])
+                    st.markdown(item_hyp_result)
+                except Exception as e:
+                    st.error(f"推測エラー: {e}")
+    else:
+        st.info("正体不明（不確実）なアイテムがありません。メモを解析してアイテムが登録されると、ここに候補が表示されます。")
+        if state.items:
+            st.markdown("**現在追跡中のアイテム（すべて確定済み）:**")
+            for i in state.items:
+                if not getattr(i, 'is_ignored', False):
+                    st.markdown(f"- {i.name}: {i.description[:50]}...")
 
 # Note: Events history moved to Timeline Tab
 

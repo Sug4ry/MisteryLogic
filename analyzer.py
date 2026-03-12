@@ -92,3 +92,60 @@ def generate_hypothesis(current_state: MysteryState, target_suspect: str, api_ke
         contents=prompt
     )
     return response.text
+
+
+def generate_item_hypothesis(current_state: MysteryState, target_item_name: str, api_key: str) -> str:
+    """
+    uncertainty=True のアイテムを対象に、その正体・用途・関連人物などを推測する。
+    Gemini に送信し、マークダウン形式の分析結果を返す。
+    """
+    client = genai.Client(api_key=api_key)
+
+    # 対象アイテムの情報を抽出
+    target_item = next((i for i in current_state.items if i.name == target_item_name), None)
+    item_detail = target_item.model_dump_json(indent=2) if target_item else f"名前: {target_item_name}"
+
+    prompt = f"""
+あなたは優秀な名探偵の助手です。
+ミステリー小説の捜査メモに、正体が判明していない「謎のアイテム」が登場しています。
+以下の現在の`状態(state.json)`と、このアイテムの詳細情報を元に、そのアイテムの正体を論理的に推測してください。
+
+現在の状態:
+{current_state.model_dump_json(indent=2)}
+
+--- 推測対象アイテム ---
+{item_detail}
+
+以下のマークダウン形式で出力してください。
+
+### 🔎 「{target_item_name}」の正体に関する仮説
+
+このアイテムが持つ特徴（説明・発見場所・所持者など）を整理し、考えられる正体を列挙してください。
+
+#### 仮説A: [最も可能性の高い解釈]
+根拠と、物語の他の要素（人物・トリック・証拠）との整合性を説明してください。
+
+#### 仮説B: [次に可能性の高い解釈]
+根拠と、物語の他の要素との整合性を説明してください。
+
+#### 仮説C: [衝撃的・意外性のある解釈（あれば）]
+根拠と、物語の他の要素との整合性を説明してください。
+
+### 🧩 このアイテムに関連する人物・証拠・トリックとの繋がり
+
+登場人物、証拠、トリックのうち、このアイテムと最も関連が深いと思われるものを挙げ、なぜ繋がりがあるのかを説明してください。
+
+### ❓ 解明のために注目すべき手がかり
+
+このアイテムの謎を解くために、今後捜査・注目すべき情報や手がかりを具体的に示してください。
+
+### ⚖️ 結論
+
+最も可能性の高い正体とその確信度（高・中・低）を示し、もしこの推測が正しかった場合に物語の真相にどう影響するかを述べてください。
+"""
+
+    response = client.models.generate_content(
+        model='gemini-2.5-pro',
+        contents=prompt
+    )
+    return response.text
